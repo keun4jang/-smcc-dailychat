@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { admin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { reportParticipant, updateApplicationStatus } from "@/app/actions";
+import type { ApplicationWithProfile } from "@/lib/types";
 
 export default async function HostRoomManagePage({
   params,
@@ -45,7 +46,7 @@ export default async function HostRoomManagePage({
 
         <div className="space-y-4">
           {applications?.length ? (
-            applications.map((app: any) => (
+            applications.map((app: ApplicationWithProfile) => (
               <div key={app.id} className="rounded-xl border p-4">
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                   <div>

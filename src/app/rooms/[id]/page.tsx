@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { admin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { applyToRoom, submitFeedback } from "@/app/actions";
+import type { Application } from "@/lib/types";
 
 function osmUrl(lat: number, lng: number) {
   const d = 0.005;
@@ -22,7 +23,7 @@ export default async function RoomDetailPage({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let myApplication: any = null;
+  let myApplication: Application | null = null;
   if (user) {
     const { data } = await admin
       .from("applications")
@@ -33,10 +34,15 @@ export default async function RoomDetailPage({
     myApplication = data;
   }
 
+  const canLeaveFeedback =
+    myApplication?.status === "CONFIRMED" || myApplication?.status === "ATTENDED";
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl bg-white p-6 shadow-sm">
-        <div className="mb-2 text-sm text-stone-500">{room.status}</div>
+        <div className="mb-2 text-sm text-stone-500">
+          {room.status === "OPEN" ? "신청 가능 / Open" : room.status === "FULL" ? "마감 / Full" : room.status}
+        </div>
         <h1 className="text-3xl font-bold">{room.title}</h1>
         {room.intro ? <p className="mt-2 text-stone-600">{room.intro}</p> : null}
 
@@ -87,10 +93,17 @@ export default async function RoomDetailPage({
           <div className="space-y-2 text-sm">
             <p>
               내 신청 상태 / My status:{" "}
-              <span className="font-semibold">{myApplication.status}</span>
+              <span className="font-semibold">
+                {myApplication.status === "APPLIED" && "검토 중 / Under Review"}
+                {myApplication.status === "CONFIRMED" && "참가 확정 / Confirmed ✓"}
+                {myApplication.status === "WAITLIST" && "대기 중 / Waitlisted"}
+                {myApplication.status === "REJECTED" && "미선정 / Not Selected"}
+                {myApplication.status === "ATTENDED" && "참가 완료 / Attended"}
+                {myApplication.status === "NOSHOW" && "불참 / No Show"}
+              </span>
             </p>
             <p className="text-stone-500">
-              신청은 선착순이 아니라 호스트 검토 후 확정됩니다.
+              신청은 선착순이 아니라 호스트 검토 후 확정됩니다. / Participation is confirmed after host review, not first-come-first-served.
             </p>
           </div>
         ) : room.status !== "OPEN" ? (
@@ -110,7 +123,7 @@ export default async function RoomDetailPage({
         )}
       </div>
 
-      {user ? (
+      {canLeaveFeedback ? (
         <div className="rounded-2xl bg-white p-6 shadow-sm">
           <h2 className="mb-3 text-xl font-semibold">참가자 의견 / Feedback</h2>
           <form action={submitFeedback} className="grid gap-3">

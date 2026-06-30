@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { admin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
+import type { HostStat, ParticipantStat, ParticipantReport, Feedback } from "@/lib/types";
 
 export default async function AdminPage() {
   const supabase = await createClient();
@@ -28,7 +29,7 @@ export default async function AdminPage() {
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xl font-semibold">많이 연 호스트 / Active Hosts</h2>
         <div className="space-y-3">
-          {hostStats?.map((host: any) => (
+          {hostStats?.map((host: HostStat) => (
             <div key={host.host_id} className="rounded-xl border p-4 text-sm">
               <p className="font-semibold">
                 {host.real_name} (@{host.instagram_id})
@@ -43,7 +44,7 @@ export default async function AdminPage() {
       <section className="rounded-2xl bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-xl font-semibold">많이 참가한 참가자 / Top Participants</h2>
         <div className="space-y-3">
-          {participantStats?.map((p: any) => (
+          {participantStats?.map((p: ParticipantStat) => (
             <div key={p.user_id} className="rounded-xl border p-4 text-sm">
               <p className="font-semibold">
                 {p.real_name} (@{p.instagram_id})
@@ -61,7 +62,7 @@ export default async function AdminPage() {
         <h2 className="mb-4 text-xl font-semibold">호스트 신고 / Host Reports</h2>
         <div className="space-y-3 text-sm">
           {reports?.length ? (
-            reports.map((r: any) => (
+            reports.map((r: ParticipantReport) => (
               <div key={r.id} className="rounded-xl border p-4">
                 <p>심각도 / Severity: {r.severity}</p>
                 <p>카테고리 / Category: {r.category}</p>
@@ -79,7 +80,7 @@ export default async function AdminPage() {
         <h2 className="mb-4 text-xl font-semibold">참가자 피드백 / Participant Feedback</h2>
         <div className="space-y-3 text-sm">
           {feedbacks?.length ? (
-            feedbacks.map((f: any) => (
+            feedbacks.map((f: Feedback) => (
               <div key={f.id} className="rounded-xl border p-4">
                 <p>전체 / Overall: {f.overall_rating}</p>
                 <p>호스트 / Host: {f.host_rating}</p>

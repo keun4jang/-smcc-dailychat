@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { admin } from "@/lib/supabase/admin";
 import SignOutButton from "@/components/sign-out-button";
+import type { Profile } from "@/lib/types";
 
 export const metadata = {
   title: "SMCC Daily Chat",
@@ -17,7 +18,7 @@ export default async function RootLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let profile: any = null;
+  let profile: Profile | null = null;
   if (user) {
     const { data } = await admin.from("profiles").select("*").eq("id", user.id).maybeSingle();
     profile = data;

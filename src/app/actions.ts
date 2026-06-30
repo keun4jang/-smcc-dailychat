@@ -6,6 +6,7 @@ import { z } from "zod";
 import { admin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { appendSheetRow } from "@/lib/sheets";
+import type { Profile } from "@/lib/types";
 
 async function getMe() {
   const supabase = await createClient();
@@ -23,11 +24,11 @@ async function getMyProfile() {
   return { user, profile };
 }
 
-function mustBeComplete(profile: any) {
+function mustBeComplete(profile: Profile | null) {
   if (!profile?.profile_completed_at) redirect("/onboarding");
 }
 
-function mustHaveRole(profile: any, roles: string[]) {
+function mustHaveRole(profile: Profile | null, roles: string[]) {
   if (!profile || !roles.includes(profile.role)) redirect("/");
 }
 
