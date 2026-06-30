@@ -35,13 +35,18 @@ export default async function RootLayout({
             <nav className="flex items-center gap-3 text-sm">
               <Link href="/">모임 / Rooms</Link>
               {profile?.role === "HOST" || profile?.role === "ADMIN" ? (
-                <Link href="/host/new">방 만들기 / New Room</Link>
+                <>
+                  <Link href="/host">내 방 / My Rooms</Link>
+                  <Link href="/host/new">방 만들기 / New Room</Link>
+                </>
               ) : null}
               {profile?.role === "ADMIN" ? <Link href="/admin">운영진 / Admin</Link> : null}
               {user ? (
                 <>
-                  {!profile?.profile_completed_at && (
+                  {!profile?.profile_completed_at ? (
                     <Link href="/onboarding">프로필 입력 / Onboarding</Link>
+                  ) : (
+                    <Link href="/profile">프로필 / Profile</Link>
                   )}
                   <SignOutButton />
                 </>
