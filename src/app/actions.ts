@@ -6,6 +6,8 @@ import { z } from "zod";
 import { admin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { appendSheetRow } from "@/lib/sheets";
+import type { Profile } from "@/lib/types";
+import { notifyAll, notifyUsers } from "@/lib/push";
 
 async function getMe() {
   const supabase = await createClient();
@@ -23,16 +25,16 @@ async function getMyProfile() {
   return { user, profile };
 }
 
-function mustBeComplete(profile: any) {
+function mustBeComplete(profile: Profile | null) {
   if (!profile?.profile_completed_at) redirect("/onboarding");
 }
 
-function mustHaveRole(profile: any, roles: string[]) {
+function mustHaveRole(profile: Profile | null, roles: string[]) {
   if (!profile || !roles.includes(profile.role)) redirect("/");
 }
 
 async function refreshRoomStatus(roomId: string) {
-  const { data: room } = await admin.from("rooms").select("id, capacity, status").eq("id", roomId).single();
+  const { data: room } = await admin.from("rooms").select("id, capacity, status, title, place_name, host_id").eq("id", roomId).single();
   const { count } = await admin
     .from("applications")
     .select("*", { head: true, count: "exact" })
@@ -43,7 +45,41 @@ async function refreshRoomStatus(roomId: string) {
   if (room.status === "CANCELLED" || room.status === "COMPLETED") return;
 
   const nextStatus = (count ?? 0) >= room.capacity ? "FULL" : "OPEN";
+  const wasOpen = room.status === "OPEN";
   await admin.from("rooms").update({ status: nextStatus }).eq("id", roomId);
+
+  // 방이 마감(FULL)으로 바뀐 경우 → 확정 참가자 + 호스트 + 관리자에게 알림
+  if (nextStatus === "FULL" && wasOpen) {
+    const [{ data: confirmed }, { data: admins }] = await Promise.all([
+      admin.from("applications").select("user_id").eq("room_id", roomId).eq("status", "CONFIRMED"),
+      admin.from("profiles").select("id").eq("role", "ADMIN"),
+    ]);
+    const targetIds = [
+      room.host_id,
+      ...(confirmed ?? []).map((a) => a.user_id),
+      ...(admins ?? []).map((a) => a.id),
+    ];
+    notifyUsers([...new Set(targetIds)], {
+      title: "데일리챗 마감됐어요 🔒",
+      body: `${room.title} · ${room.place_name} 참가자 모집이 완료됐습니다.`,
+      url: `/rooms/${roomId}`,
+    }).catch(() => {});
+  }
+}
+
+export async function updateUserRole(formData: FormData) {
+  const { profile } = await getMyProfile();
+  mustHaveRole(profile, ["ADMIN"]);
+
+  const userId = String(formData.get("user_id"));
+  const role = String(formData.get("role"));
+
+  if (!["USER", "HOST", "ADMIN"].includes(role)) throw new Error("Invalid role");
+
+  const { error } = await admin.from("profiles").update({ role }).eq("id", userId);
+  if (error) throw new Error(error.message);
+
+  revalidatePath("/admin");
 }
 
 export async function upsertProfile(formData: FormData) {
@@ -151,20 +187,34 @@ export async function createRoom(formData: FormData) {
     payload.host_instagram_id,
   ]);
 
+  // 새 방 생성 알림 — 전체 구독자
+  notifyAll({
+    title: "새 데일리챗 열렸어요! ☕",
+    body: `${payload.title} · ${payload.place_name}`,
+    url: `/rooms/${data.id}`,
+  }).catch(() => {});
+
   revalidatePath("/");
   redirect(`/host/rooms/${data.id}`);
 }
 
-export async function applyToRoom(formData: FormData) {
-  const { user, profile } = await getMyProfile();
-  mustBeComplete(profile);
+export async function applyToRoom(
+  _prev: { error: string },
+  formData: FormData
+): Promise<{ error: string }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "로그인이 필요합니다. / Please log in." };
+
+  const { data: profile } = await admin.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  if (!profile?.profile_completed_at) redirect("/onboarding");
 
   const roomId = String(formData.get("room_id"));
 
   const { data: room } = await admin.from("rooms").select("*").eq("id", roomId).single();
-  if (!room) throw new Error("Room not found");
-  if (room.status !== "OPEN") throw new Error("Room is closed");
-  if (new Date(room.apply_deadline) < new Date()) throw new Error("Deadline passed");
+  if (!room) return { error: "방을 찾을 수 없습니다. / Room not found." };
+  if (room.status !== "OPEN") return { error: "신청이 마감된 방입니다. / Room is closed." };
+  if (new Date(room.apply_deadline) < new Date()) return { error: "신청 마감 시간이 지났습니다. / Deadline has passed." };
 
   const { error } = await admin.from("applications").insert({
     room_id: roomId,
@@ -172,7 +222,7 @@ export async function applyToRoom(formData: FormData) {
     status: "APPLIED",
   });
 
-  if (error && error.code !== "23505") throw new Error(error.message);
+  if (error && error.code !== "23505") return { error: error.message };
 
   await appendSheetRow("applications_log", [
     new Date().toISOString(),
@@ -232,9 +282,16 @@ export async function updateApplicationStatus(formData: FormData) {
   revalidatePath(`/host/rooms/${roomId}`);
 }
 
-export async function submitFeedback(formData: FormData) {
-  const { user, profile } = await getMyProfile();
-  mustBeComplete(profile);
+export async function submitFeedback(
+  _prev: { error: string; success: boolean },
+  formData: FormData
+): Promise<{ error: string; success: boolean }> {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { error: "로그인이 필요합니다. / Please log in.", success: false };
+
+  const { data: profile } = await admin.from("profiles").select("*").eq("id", user.id).maybeSingle();
+  if (!profile) return { error: "프로필을 찾을 수 없습니다.", success: false };
 
   const roomId = String(formData.get("room_id"));
   const overall_rating = Number(formData.get("overall_rating"));
@@ -255,7 +312,7 @@ export async function submitFeedback(formData: FormData) {
     comment,
   });
 
-  if (error) throw new Error(error.message);
+  if (error) return { error: error.message, success: false };
 
   await appendSheetRow("feedback_log", [
     new Date().toISOString(),
@@ -272,6 +329,7 @@ export async function submitFeedback(formData: FormData) {
   ]);
 
   revalidatePath(`/rooms/${roomId}`);
+  return { error: "", success: true };
 }
 
 export async function reportParticipant(formData: FormData) {

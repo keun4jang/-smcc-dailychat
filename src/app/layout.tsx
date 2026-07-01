@@ -3,6 +3,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { admin } from "@/lib/supabase/admin";
 import SignOutButton from "@/components/sign-out-button";
+import PushSubscribe from "@/components/push-subscribe";
+import type { Profile } from "@/lib/types";
 
 export const metadata = {
   title: "SMCC Daily Chat",
@@ -17,7 +19,7 @@ export default async function RootLayout({
     data: { user },
   } = await supabase.auth.getUser();
 
-  let profile: any = null;
+  let profile: Profile | null = null;
   if (user) {
     const { data } = await admin.from("profiles").select("*").eq("id", user.id).maybeSingle();
     profile = data;
@@ -34,13 +36,18 @@ export default async function RootLayout({
             <nav className="flex items-center gap-3 text-sm">
               <Link href="/">모임 / Rooms</Link>
               {profile?.role === "HOST" || profile?.role === "ADMIN" ? (
-                <Link href="/host/new">방 만들기 / New Room</Link>
+                <>
+                  <Link href="/host">내 방 / My Rooms</Link>
+                  <Link href="/host/new">방 만들기 / New Room</Link>
+                </>
               ) : null}
               {profile?.role === "ADMIN" ? <Link href="/admin">운영진 / Admin</Link> : null}
               {user ? (
                 <>
-                  {!profile?.profile_completed_at && (
+                  {!profile?.profile_completed_at ? (
                     <Link href="/onboarding">프로필 입력 / Onboarding</Link>
+                  ) : (
+                    <Link href="/profile">프로필 / Profile</Link>
                   )}
                   <SignOutButton />
                 </>
@@ -50,6 +57,11 @@ export default async function RootLayout({
             </nav>
           </div>
         </header>
+        <div className="border-b bg-stone-100 py-1.5">
+          <div className="mx-auto flex max-w-6xl justify-end px-4">
+            <PushSubscribe />
+          </div>
+        </div>
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
       </body>
     </html>
