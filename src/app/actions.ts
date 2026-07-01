@@ -7,6 +7,7 @@ import { admin } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
 import { appendSheetRow } from "@/lib/sheets";
 import type { Profile } from "@/lib/types";
+import { notifyAll, notifyUsers } from "@/lib/push";
 
 async function getMe() {
   const supabase = await createClient();
@@ -33,7 +34,7 @@ function mustHaveRole(profile: Profile | null, roles: string[]) {
 }
 
 async function refreshRoomStatus(roomId: string) {
-  const { data: room } = await admin.from("rooms").select("id, capacity, status").eq("id", roomId).single();
+  const { data: room } = await admin.from("rooms").select("id, capacity, status, title, place_name, host_id").eq("id", roomId).single();
   const { count } = await admin
     .from("applications")
     .select("*", { head: true, count: "exact" })
@@ -44,7 +45,26 @@ async function refreshRoomStatus(roomId: string) {
   if (room.status === "CANCELLED" || room.status === "COMPLETED") return;
 
   const nextStatus = (count ?? 0) >= room.capacity ? "FULL" : "OPEN";
+  const wasOpen = room.status === "OPEN";
   await admin.from("rooms").update({ status: nextStatus }).eq("id", roomId);
+
+  // 방이 마감(FULL)으로 바뀐 경우 → 확정 참가자 + 호스트 + 관리자에게 알림
+  if (nextStatus === "FULL" && wasOpen) {
+    const [{ data: confirmed }, { data: admins }] = await Promise.all([
+      admin.from("applications").select("user_id").eq("room_id", roomId).eq("status", "CONFIRMED"),
+      admin.from("profiles").select("id").eq("role", "ADMIN"),
+    ]);
+    const targetIds = [
+      room.host_id,
+      ...(confirmed ?? []).map((a) => a.user_id),
+      ...(admins ?? []).map((a) => a.id),
+    ];
+    notifyUsers([...new Set(targetIds)], {
+      title: "데일리챗 마감됐어요 🔒",
+      body: `${room.title} · ${room.place_name} 참가자 모집이 완료됐습니다.`,
+      url: `/rooms/${roomId}`,
+    }).catch(() => {});
+  }
 }
 
 export async function updateUserRole(formData: FormData) {
@@ -166,6 +186,13 @@ export async function createRoom(formData: FormData) {
     payload.host_name,
     payload.host_instagram_id,
   ]);
+
+  // 새 방 생성 알림 — 전체 구독자
+  notifyAll({
+    title: "새 데일리챗 열렸어요! ☕",
+    body: `${payload.title} · ${payload.place_name}`,
+    url: `/rooms/${data.id}`,
+  }).catch(() => {});
 
   revalidatePath("/");
   redirect(`/host/rooms/${data.id}`);

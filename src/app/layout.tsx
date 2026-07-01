@@ -3,6 +3,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { admin } from "@/lib/supabase/admin";
 import SignOutButton from "@/components/sign-out-button";
+import PushSubscribe from "@/components/push-subscribe";
 import type { Profile } from "@/lib/types";
 
 export const metadata = {
@@ -56,6 +57,11 @@ export default async function RootLayout({
             </nav>
           </div>
         </header>
+        <div className="border-b bg-stone-100 py-1.5">
+          <div className="mx-auto flex max-w-6xl justify-end px-4">
+            <PushSubscribe />
+          </div>
+        </div>
         <main className="mx-auto max-w-6xl px-4 py-8">{children}</main>
       </body>
     </html>
